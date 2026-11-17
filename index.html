@@ -93,6 +93,19 @@
 <div class="offline" id="offline">Sin conexión: la herramienta funciona igual.</div>
 
 <main>
+  <!-- VISTA AL ESCANEAR EL QR -->
+  <section class="card" id="vista" style="display:none">
+    <div class="step"><span>✓</span><h2>Ficha de trazabilidad</h2></div>
+    <img id="vistaImg" alt="Ficha de trazabilidad de la lámina" style="width:100%;display:block;border-radius:6px;box-shadow:0 2px 10px rgba(0,0,0,.15)">
+    <button class="btn-main btn-big mt" id="vistaPDF"><span>▤</span><span>Descargar ficha en PDF<small>10 × 15 cm</small></span></button>
+    <div class="status" id="stVista"></div>
+    <p class="hint">Ficha emitida por Señal Vial SpA. Los datos corresponden al código QR escaneado.</p>
+  </section>
+  <section class="card" id="vistaError" style="display:none">
+    <div class="step"><span>!</span><h2>No se pudo abrir la ficha</h2></div>
+    <p class="hint">El código QR está incompleto o dañado. Intenta escanearlo de nuevo con buena luz.</p>
+  </section>
+  <div id="herramienta">
   <!-- PASO 1 -->
   <section class="card">
     <div class="step"><span>1</span><h2>Foto de los códigos de barras</h2></div>
@@ -174,10 +187,11 @@
       <img id="qrPrev" alt="Código QR generado" style="display:none">
       <img id="preview" alt="Hoja de trazabilidad generada" style="display:none">
       <p class="hint" id="hintRes"></p>
-      <details class="mt"><summary>Ver contenido del QR</summary><pre id="qrtext"></pre></details>
+      <details class="mt"><summary>Ver enlace del QR</summary><pre id="qrtext"></pre></details>
     </div>
   </section>
 
+  </div>
   <footer class="credito">
     <div class="credito-linea"></div>
     <p>Herramienta desarrollada por el<br><b>Área de Investigación e Innovación · CFT</b></p>
@@ -345,12 +359,29 @@ function datos(){
     mandante:g("mandante"), proyecto:g("proyecto"), ot:g("ot")
   };
 }
-function textoQR(d){
-  const L = [["Lámina",d.lamina],["Código ORALITE",d.codigo],["Color",d.color],["Lote lámina",d.lote],["Rollo",d.medida],
-    ["Cód. distribuidor",d.codDist],["Garantía lámina",d.garantia],["Sistema impresión",d.sistema],["Impresora",d.impresora],
-    ["Tintas",d.tintas],["Fabricante",d.fabricante],["Fecha fabricación",d.fecha],["Mandante",d.mandante],["Proyecto",d.proyecto],["N° OT / señal",d.ot]];
-  return ["SEÑAL VIAL SpA - FICHA DE TRAZABILIDAD", ...L.filter(x=>x[1]).map(x=>`${x[0]}: ${x[1]}`), "www.svialspa.com · Antofagasta, Chile"].join("\n");
+// El QR lleva un ENLACE a la ficha de esta caja: los datos van dentro del enlace (#f=...),
+// así no se necesita base de datos y al escanear se abre la hoja de trazabilidad.
+const CAMPOS = ["lamina","codigo","color","lote","medida","codDist","garantia","sistema","impresora","tintas","fabricante","fecha","mandante","proyecto","ot"];
+const b64u = bytes => { let s=""; bytes.forEach(b=>s+=String.fromCharCode(b)); return btoa(s).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,""); };
+const desB64u = str => { const s=atob(str.replace(/-/g,"+").replace(/_/g,"/")); const a=new Uint8Array(s.length); for(let i=0;i<s.length;i++) a[i]=s.charCodeAt(i); return a; };
+async function comprimir(bytes, modo){
+  const cs = new (modo==="c"?CompressionStream:DecompressionStream)("deflate-raw");
+  const out = new Blob([bytes]).stream().pipeThrough(cs);
+  return new Uint8Array(await new Response(out).arrayBuffer());
 }
+async function empaquetarFicha(d){
+  const raw = new TextEncoder().encode(JSON.stringify(CAMPOS.map(k=>d[k]||"")));
+  if(window.CompressionStream){ try{ return "2"+b64u(await comprimir(raw,"c")); }catch(e){} }
+  return "1"+b64u(raw);
+}
+async function abrirFicha(code){
+  let bytes = desB64u(code.slice(1));
+  if(code[0]==="2") bytes = await comprimir(bytes,"d");
+  const arr = JSON.parse(new TextDecoder().decode(bytes));
+  const d = {}; CAMPOS.forEach((k,i)=>d[k]=arr[i]||""); return d;
+}
+const baseURL = () => location.href.split("#")[0].split("?")[0];
+async function textoQR(d){ return baseURL() + "#f=" + await empaquetarFicha(d); }
 
 // ---------- dibujo de la etiqueta ----------
 function fitFont(ctx, txt, maxW, size, weight, fam){
@@ -364,9 +395,8 @@ function wrap(ctx, txt, maxW){
   if(cur) lines.push(cur); return lines;
 }
 
-async function dibujar(){
+async function dibujar(d, qtxt){
   try{ await Promise.all([document.fonts.load("800 60px 'Barlow Condensed'"),document.fonts.load("700 40px Barlow"),document.fonts.load("500 40px Barlow")]); }catch(e){}
-  const d = datos(); const qtxt = textoQR(d);
   const cv = $("cv"), c = cv.getContext("2d");
   const W = cv.width, H = cv.height, M = 70;
   c.fillStyle="#fff"; c.fillRect(0,0,W,H);
@@ -390,29 +420,47 @@ async function dibujar(){
   c.fillStyle = "#9FC9CB"; c.fillRect(0,SY,W*0.14,SH);
   c.fillStyle = AM; c.fillRect(W*0.14,SY,W*0.86,SH);
 
-  // QR
-  const qr = qrcode(0, "M");
-  qrcode.stringToBytes = qrcode.stringToBytesFuncs["UTF-8"];
-  qr.addData(qtxt, "Byte"); qr.make();
-  const n = qr.getModuleCount();
   const QS = 440, QX = M - 20, QY = SY + SH + 35;
-  const quiet = 4; const cell = Math.floor(QS/(n+quiet*2)); const real = cell*(n+quiet*2);
-  const ox = QX + (QS-real)/2, oy = QY + (QS-real)/2;
-  c.fillStyle="#fff"; c.fillRect(ox,oy,real,real);
-  c.fillStyle="#000";
-  for(let r=0;r<n;r++) for(let k=0;k<n;k++) if(qr.isDark(r,k)) c.fillRect(ox+(k+quiet)*cell, oy+(r+quiet)*cell, cell, cell);
+  if(qtxt){
+    // QR
+    const qr = qrcode(0, "M");
+    qrcode.stringToBytes = qrcode.stringToBytesFuncs["UTF-8"];
+    qr.addData(qtxt, "Byte"); qr.make();
+    const n = qr.getModuleCount();
+    const quiet = 4; const cell = Math.floor(QS/(n+quiet*2)); const real = cell*(n+quiet*2);
+    const ox = QX + (QS-real)/2, oy = QY + (QS-real)/2;
+    c.fillStyle="#fff"; c.fillRect(ox,oy,real,real);
+    c.fillStyle="#000";
+    for(let r=0;r<n;r++) for(let k=0;k<n;k++) if(qr.isDark(r,k)) c.fillRect(ox+(k+quiet)*cell, oy+(r+quiet)*cell, cell, cell);
 
-  // texto junto al QR
-  const TX = QX + QS + 40, TW = W - M - TX;
-  c.fillStyle = NE; c.font = "700 44px Barlow";
-  let y = QY + 90;
-  for(const l of wrap(c, "Escanee para ver los datos de fabricación", TW)){ c.fillText(l, TX, y); y += 52; }
-  y += 12; c.fillStyle = "#3d5254"; c.font = "500 36px Barlow";
-  for(const l of wrap(c, d.lamina || "Lámina ORALITE®", TW)){ c.fillText(l, TX, y); y += 44; }
-  if(d.garantia){
-    y += 18; const t = "Garantía lámina " + d.garantia;
-    c.font = "700 36px Barlow"; const tw = Math.min(c.measureText(t).width + 36, TW);
-    c.fillStyle = NE; c.fillRect(TX, y-38, tw, 56); c.fillStyle = "#fff"; c.fillText(t, TX+18, y+2);
+    // texto junto al QR
+    const TX = QX + QS + 40, TW = W - M - TX;
+    c.fillStyle = NE; c.font = "700 44px Barlow";
+    let y = QY + 90;
+    for(const l of wrap(c, "Escanee para ver los datos de fabricación", TW)){ c.fillText(l, TX, y); y += 52; }
+    y += 12; c.fillStyle = "#3d5254"; c.font = "500 36px Barlow";
+    for(const l of wrap(c, d.lamina || "Lámina ORALITE®", TW)){ c.fillText(l, TX, y); y += 44; }
+    if(d.garantia){
+      y += 18; const t = "Garantía lámina " + d.garantia;
+      c.font = "700 36px Barlow"; const tw = Math.min(c.measureText(t).width + 36, TW);
+      c.fillStyle = NE; c.fillRect(TX, y-38, tw, 56); c.fillStyle = "#fff"; c.fillText(t, TX+18, y+2);
+    }
+  }else{
+    // Ficha de identificación (la que se abre al escanear): sin QR
+    const TX = M, TW = W - 2*M;
+    c.fillStyle = "#EAF4F4"; c.fillRect(M, QY+10, TW, QS-30);
+    c.fillStyle = NE; c.fillRect(M, QY+10, 10, QS-30);
+    let y = QY + 95;
+    c.fillStyle = "#3d5254"; c.font = "600 34px Barlow"; c.fillText("Identificación de la lámina", TX+50, y);
+    y += 82; c.fillStyle = NE; fitFont(c, "Lote " + (d.lote||"—"), TW-100, 76, 700, "Barlow"); c.fillText("Lote " + (d.lote||"—"), TX+50, y);
+    y += 66; c.fillStyle = "#1d2b2c"; c.font = "500 40px Barlow";
+    for(const l of wrap(c, (d.lamina||"Lámina ORALITE®") + (d.color ? " · " + d.color : ""), TW-100)){ c.fillText(l, TX+50, y); y += 48; }
+    if(d.garantia){
+      y += 30; const t = "Garantía lámina " + d.garantia;
+      c.font = "700 36px Barlow"; const tw = c.measureText(t).width + 36;
+      c.fillStyle = NE; c.fillRect(TX+50, y-38, tw, 56); c.fillStyle = "#fff"; c.fillText(t, TX+68, y+2);
+      if(d.fecha){ c.fillStyle = "#3d5254"; c.font = "500 32px Barlow"; c.fillText("Fabricada el " + d.fecha, TX+50+tw+30, y+2); }
+    }
   }
 
   // tabla
@@ -500,7 +548,7 @@ function mostrar(tipo){
 $("btnQR").addEventListener("click", async ()=>{
   if(avisoFaltantes()) return;
   try{ await document.fonts.load("700 40px Barlow"); }catch(e){}
-  ultimoTexto = textoQR(datos());
+  ultimoTexto = await textoQR(datos());
   const cv = canvasQR(ultimoTexto);
   $("qrPrev").src = cv.toDataURL("image/png");
   mostrar("qr");
@@ -511,7 +559,8 @@ $("btnPDF").addEventListener("click", async ()=>{
   if(avisoFaltantes()) return;
   const b = $("btnPDF"); b.disabled = true;
   try{
-    ultimoTexto = await dibujar();
+    ultimoTexto = await textoQR(datos());
+    await dibujar(datos(), ultimoTexto);
     const png = $("cv").toDataURL("image/png");
     $("preview").src = png; mostrar("pdf");
     const pdf = new window.jspdf.jsPDF({unit:"mm", format:[100,150], orientation:"portrait"});
@@ -521,6 +570,29 @@ $("btnPDF").addEventListener("click", async ()=>{
   }catch(err){ setSt("stRes","No se pudo generar el PDF.","err"); }
   finally{ b.disabled = false; }
 });
+
+// ---------- vista al escanear el QR ----------
+async function abrirVista(){
+  const m = location.hash.match(/^#f=([12][A-Za-z0-9_-]+)$/);
+  if(!m) return false;
+  $("herramienta").style.display = "none";
+  try{
+    const d = await abrirFicha(m[1]);
+    await dibujar(d, null);
+    const png = $("cv").toDataURL("image/png");
+    $("vistaImg").src = png; $("vista").style.display = "block";
+    document.title = "Ficha " + (d.lote ? "lote " + d.lote : "ORALITE") + " · Señal Vial";
+    $("vistaPDF").onclick = async ()=>{
+      const pdf = new window.jspdf.jsPDF({unit:"mm", format:[100,150], orientation:"portrait"});
+      pdf.setProperties({title:document.title, author:"Señal Vial SpA"});
+      pdf.addImage(png, "PNG", 0, 0, 100, 150, undefined, "FAST");
+      await entregar(pdf.output("blob"), "Ficha_" + (d.lote||"oralite").replace(/[^\w-]+/g,"_") + ".pdf", "stVista", "✓ Ficha lista.");
+    };
+  }catch(e){ $("vistaError").style.display = "block"; }
+  return true;
+}
+abrirVista();
+addEventListener("hashchange", ()=>location.reload());
 
 // ---------- modo sin conexión ----------
 function estadoRed(){ $("offline").style.display = navigator.onLine ? "none" : "block"; }
