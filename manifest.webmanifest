@@ -1,0 +1,29 @@
+{
+ "name": "Ficha QR ORALITE · Señal Vial",
+ "short_name": "Ficha QR",
+ "start_url": "./",
+ "scope": "./",
+ "display": "standalone",
+ "background_color": "#EEF3F3",
+ "theme_color": "#0B5257",
+ "lang": "es",
+ "description": "Lee los códigos de barras de cajas ORALITE y genera QR y hoja de trazabilidad. Área de Investigación e Innovación · CFT.",
+ "icons": [
+  {
+   "src": "icons/icon-192.png",
+   "sizes": "192x192",
+   "type": "image/png"
+  },
+  {
+   "src": "icons/icon-512.png",
+   "sizes": "512x512",
+   "type": "image/png"
+  },
+  {
+   "src": "icons/icon-maskable-512.png",
+   "sizes": "512x512",
+   "type": "image/png",
+   "purpose": "maskable"
+  }
+ ]
+}
