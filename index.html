@@ -10,14 +10,14 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Ficha QR">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" href="icons/icon-192.png">
-<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <style>
-  @font-face{font-family:Barlow;font-weight:400;font-display:swap;src:url(fonts/barlow-latin-400-normal.woff2) format("woff2")}
-  @font-face{font-family:Barlow;font-weight:500;font-display:swap;src:url(fonts/barlow-latin-500-normal.woff2) format("woff2")}
-  @font-face{font-family:Barlow;font-weight:600;font-display:swap;src:url(fonts/barlow-latin-600-normal.woff2) format("woff2")}
-  @font-face{font-family:Barlow;font-weight:700 800;font-display:swap;src:url(fonts/barlow-latin-700-normal.woff2) format("woff2")}
-  @font-face{font-family:"Barlow Condensed";font-weight:600 800;font-display:swap;src:url(fonts/barlow-condensed-latin-700-normal.woff2) format("woff2")}
+  @font-face{font-family:Barlow;font-weight:400;font-display:swap;src:url(barlow-latin-400-normal.woff2) format("woff2")}
+  @font-face{font-family:Barlow;font-weight:500;font-display:swap;src:url(barlow-latin-500-normal.woff2) format("woff2")}
+  @font-face{font-family:Barlow;font-weight:600;font-display:swap;src:url(barlow-latin-600-normal.woff2) format("woff2")}
+  @font-face{font-family:Barlow;font-weight:700 800;font-display:swap;src:url(barlow-latin-700-normal.woff2) format("woff2")}
+  @font-face{font-family:"Barlow Condensed";font-weight:600 800;font-display:swap;src:url(barlow-condensed-latin-700-normal.woff2) format("woff2")}
   :root{--pet:#0B5257;--pet2:#073A3D;--arena:#E3D0CA;--cel:#9FC9CB;--gris:#EEF3F3;--linea:#cfdcdc;--suave:#5d6b6c;--ok:#1f7a3a;--err:#b3261e}
   *{box-sizing:border-box}
   html,body{margin:0;background:var(--gris);color:#1d2b2c;font-family:Barlow,system-ui,sans-serif;font-size:16px;-webkit-text-size-adjust:100%}
@@ -187,9 +187,9 @@
 
 <canvas id="cv" width="1181" height="1772" style="display:none"></canvas>
 
-<script src="lib/qrcode.js"></script>
-<script src="lib/jspdf.umd.min.js"></script>
-<script src="lib/zxing-reader.js"></script>
+<script src="qrcode.js"></script>
+<script src="jspdf.umd.min.js"></script>
+<script src="zxing-reader.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 const AM = "#E3D0CA", NE = "#0B5257";
@@ -255,7 +255,7 @@ $("catImport").onchange = async e=>{
 
 // ---------- lectura de códigos de barras (en el teléfono, sin internet) ----------
 ZXingWASM.prepareZXingModule({
-  overrides:{ locateFile:(path,prefix)=> path.endsWith(".wasm") ? new URL("lib/zxing_reader.wasm", location.href).href : prefix+path },
+  overrides:{ locateFile:(path,prefix)=> path.endsWith(".wasm") ? new URL("zxing_reader.wasm", location.href).href : prefix+path },
   fireImmediately:true
 }).catch(()=>{});
 
